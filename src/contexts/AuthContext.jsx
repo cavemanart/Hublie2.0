@@ -35,32 +35,44 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      console.log("Initial session:", session, "Error:", error);
+    const initAuth = async () => {
+      const pollSession = async (attempts = 5) => {
+        for (let i = 0; i < attempts; i++) {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error) {
+            console.error('Error fetching session:', error);
+            break;
+          }
 
-      if (session?.user) {
-        await upsertProfile(session.user);
-        const profile = await fetchProfile(session.user.id);
+          if (session?.user) {
+            await upsertProfile(session.user);
+            const profile = await fetchProfile(session.user.id);
 
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-          displayName: profile?.display_name || session.user.email,
-          avatarUrl: profile?.avatar_url || '',
-          role: profile?.role || 'Roommate',
-          households: profile?.households_ids || [],
-        });
-      }
+            setUser({
+              id: session.user.id,
+              email: session.user.email,
+              displayName: profile?.display_name || session.user.email,
+              avatarUrl: profile?.avatar_url || '',
+              role: profile?.role || 'Roommate',
+              households: profile?.households_ids || [],
+            });
 
-      setLoading(false);
+            break;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        setLoading(false);
+      };
+
+      await pollSession();
     };
 
-    getSession();
+    initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        console.log("Auth state changed:", _event, session);
         if (session?.user) {
           await upsertProfile(session.user);
           const profile = await fetchProfile(session.user.id);
@@ -87,7 +99,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const registerUser = async (email, password, displayName, role = 'Roommate') => {
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -104,7 +116,8 @@ export const AuthProvider = ({ children }) => {
       throw signUpError;
     }
 
-    return true; // Auth listener will handle upsert + user state
+    // Auth state will update automatically
+    return true;
   };
 
   const loginUser = async (email, password) => {
@@ -115,6 +128,7 @@ export const AuthProvider = ({ children }) => {
       throw error;
     }
 
+    // Auth state will update automatically
     return true;
   };
 
