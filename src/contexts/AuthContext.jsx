@@ -36,7 +36,8 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error } = await supabase.auth.getSession();
+      console.log("Initial session:", session, "Error:", error);
 
       if (session?.user) {
         await upsertProfile(session.user);
@@ -59,6 +60,7 @@ export const AuthProvider = ({ children }) => {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        console.log("Auth state changed:", _event, session);
         if (session?.user) {
           await upsertProfile(session.user);
           const profile = await fetchProfile(session.user.id);
