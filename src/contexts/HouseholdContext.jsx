@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabaseClient';
@@ -34,60 +34,56 @@ export const HouseholdProvider = ({ children }) => {
   const [currentMemberPermissions, setCurrentMemberPermissions] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadHouseholdData = async () => {
-      setLoading(true);
-      if (user && user.households && user.households.length > 0) {
-        const currentHouseholdId = user.households[0];
+  const loadHouseholdData = useCallback(async () => {
+    setLoading(true);
+    if (user && user.households && user.households.length > 0) {
+      const currentHouseholdId = user.households[0];
 
-        const { data: householdData, error: householdError } = await supabase
-          .from('households')
-          .select(`
-            *,
-            members: household_members (
-              user_id,
-              role,
-              profiles (display_name, avatar_url)
-            )
-          `)
-          .eq('id', currentHouseholdId)
-          .single();
+      const { data: householdData, error: householdError } = await supabase
+        .from('households')
+        .select(`
+          *,
+          members: household_members (
+            user_id,
+            role,
+            profiles (display_name, avatar_url)
+          )
+        `)
+        .eq('id', currentHouseholdId)
+        .single();
 
-        if (householdError) {
-          console.error('Error fetching household data:', householdError);
-          setHousehold(null);
-          setCurrentMemberPermissions(null);
-        } else if (householdData) {
-          setHousehold(householdData);
-          const member = householdData.members.find(m => m.user_id === user.id);
-          if (member && member.role) {
-            setCurrentMemberPermissions(defaultPermissions[member.role] || {});
-          } else {
-            setCurrentMemberPermissions(null);
-          }
-        } else {
-          setHousehold(null);
-          setCurrentMemberPermissions(null);
-        }
+      if (householdError) {
+        console.error('Error fetching household data:', householdError);
+        setHousehold(null);
+        setCurrentMemberPermissions(null);
+      } else if (householdData) {
+        setHousehold(householdData);
+        const member = householdData.members.find(m => m.user_id === user.id);
+        setCurrentMemberPermissions(defaultPermissions[member?.role] || {});
       } else {
         setHousehold(null);
         setCurrentMemberPermissions(null);
       }
-      setLoading(false);
-    };
-
-    if (user) {
-        loadHouseholdData();
     } else {
-        setHousehold(null);
-        setCurrentMemberPermissions(null);
-        setLoading(false);
+      setHousehold(null);
+      setCurrentMemberPermissions(null);
     }
+    setLoading(false);
   }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadHouseholdData();
+    } else {
+      setHousehold(null);
+      setCurrentMemberPermissions(null);
+      setLoading(false);
+    }
+  }, [user, loadHouseholdData]);
 
   const createHousehold = async (name, adminUserId) => {
     const inviteCode = uuidv4().substring(0, 8).toUpperCase();
-    
+
     const { data: newHouseholdData, error: createError } = await supabase
       .from('households')
       .insert([{ name, invite_code: inviteCode }])
@@ -99,10 +95,6 @@ export const HouseholdProvider = ({ children }) => {
       throw createError;
     }
 
-    if (!newHouseholdData) {
-        throw new Error("Failed to create household, no data returned.");
-    }
-
     const { error: memberError } = await supabase
       .from('household_members')
       .insert([{ household_id: newHouseholdData.id, user_id: adminUserId, role: 'Parent/Adult' }]);
@@ -112,23 +104,24 @@ export const HouseholdProvider = ({ children }) => {
       throw memberError;
     }
 
-    if (user && user.id === adminUserId) {
+    if (user?.id === adminUserId) {
       const updatedUserHouseholds = [...(user.households || []), newHouseholdData.id];
       await updateAuthUser({ households: updatedUserHouseholds });
     }
-    
+
     const { data: fetchedHousehold, error: fetchError } = await supabase
-        .from('households')
-        .select(`*, members: household_members (user_id, role, profiles (display_name, avatar_url))`)
-        .eq('id', newHouseholdData.id)
-        .single();
-    
+      .from('households')
+      .select(`*, members: household_members (user_id, role, profiles (display_name, avatar_url))`)
+      .eq('id', newHouseholdData.id)
+      .single();
+
     if (fetchError || !fetchedHousehold) {
-        console.error('Error refetching new household:', fetchError);
-        setHousehold(newHouseholdData);
+      console.error('Error refetching new household:', fetchError);
+      setHousehold(newHouseholdData);
     } else {
-        setHousehold(fetchedHousehold);
+      setHousehold(fetchedHousehold);
     }
+
     setCurrentMemberPermissions(defaultPermissions['Parent/Adult'] || {});
     return fetchedHousehold || newHouseholdData;
   };
@@ -147,19 +140,21 @@ export const HouseholdProvider = ({ children }) => {
 
     const isAlreadyMember = targetHouseholdData.members.some(m => m.user_id === userId);
     if (isAlreadyMember) {
-         const { data: fullHousehold, error: fetchFullError } = await supabase
-            .from('households')
-            .select(`*, members: household_members (user_id, role, profiles (display_name, avatar_url))`)
-            .eq('id', targetHouseholdData.id)
-            .single();
-        if(fetchFullError || !fullHousehold) {
-            console.error("Error fetching full household details for existing member:", fetchFullError);
-            return null;
-        }
-        setHousehold(fullHousehold);
-        const member = fullHousehold.members.find(m => m.user_id === userId);
-        setCurrentMemberPermissions(defaultPermissions[member?.role || role] || {});
-        return fullHousehold;
+      const { data: fullHousehold, error: fetchFullError } = await supabase
+        .from('households')
+        .select(`*, members: household_members (user_id, role, profiles (display_name, avatar_url))`)
+        .eq('id', targetHouseholdData.id)
+        .single();
+
+      if (fetchFullError || !fullHousehold) {
+        console.error("Error fetching full household details for existing member:", fetchFullError);
+        return null;
+      }
+
+      setHousehold(fullHousehold);
+      const member = fullHousehold.members.find(m => m.user_id === userId);
+      setCurrentMemberPermissions(defaultPermissions[member?.role || role] || {});
+      return fullHousehold;
     }
 
     const { error: memberError } = await supabase
@@ -171,27 +166,27 @@ export const HouseholdProvider = ({ children }) => {
       throw memberError;
     }
 
-    if (user && user.id === userId) {
+    if (user?.id === userId) {
       const updatedUserHouseholds = [...(user.households || []), targetHouseholdData.id];
       await updateAuthUser({ households: updatedUserHouseholds });
     }
-    
+
     const { data: fetchedHousehold, error: fetchError } = await supabase
-        .from('households')
-        .select(`*, members: household_members (user_id, role, profiles (display_name, avatar_url))`)
-        .eq('id', targetHouseholdData.id)
-        .single();
-    
+      .from('households')
+      .select(`*, members: household_members (user_id, role, profiles (display_name, avatar_url))`)
+      .eq('id', targetHouseholdData.id)
+      .single();
+
     if (fetchError || !fetchedHousehold) {
-        console.error('Error refetching household after join:', fetchError);
-        return null;
+      console.error('Error refetching household after join:', fetchError);
+      return null;
     }
 
     setHousehold(fetchedHousehold);
     setCurrentMemberPermissions(defaultPermissions[role] || {});
     return fetchedHousehold;
   };
-  
+
   const value = {
     household,
     currentMemberPermissions,
