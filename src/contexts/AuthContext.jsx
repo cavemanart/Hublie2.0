@@ -92,15 +92,15 @@ export const AuthProvider = ({ children }) => {
       // This insert operation will be checked by the RLS policy.
       // The `id` field MUST match `authData.user.id` (which is auth.uid() in the policy context).
       const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: authData.user.id, // This is crucial for the RLS policy
-          display_name: displayName,
-          email: authData.user.email, // Storing email in profiles table too
-          role: role,
-          avatar_url: '',
-          households_ids: [],
-        });
+  .from('profiles')
+  .upsert({
+    id: authData.user.id,
+    display_name: displayName,
+    email: authData.user.email,
+    role: role,
+    avatar_url: '',
+    households_ids: [],
+  });
 
       if (profileError) {
         console.error('Error creating profile:', profileError);
