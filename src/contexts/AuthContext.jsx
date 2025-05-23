@@ -34,6 +34,29 @@ export const AuthProvider = ({ children }) => {
     return profile;
   };
 
+  const refreshUser = async () => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Error refreshing session:', error);
+      return;
+    }
+    if (session?.user) {
+      await upsertProfile(session.user);
+      const profile = await fetchProfile(session.user.id);
+
+      setUser({
+        id: session.user.id,
+        email: session.user.email,
+        displayName: profile?.display_name || session.user.email,
+        avatarUrl: profile?.avatar_url || '',
+        role: profile?.role || 'Roommate',
+        households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
+      });
+    } else {
+      setUser(null);
+    }
+  };
+
   useEffect(() => {
     const initAuth = async () => {
       const pollSession = async (attempts = 5) => {
@@ -54,10 +77,14 @@ export const AuthProvider = ({ children }) => {
               displayName: profile?.display_name || session.user.email,
               avatarUrl: profile?.avatar_url || '',
               role: profile?.role || 'Roommate',
-              households: profile?.households_ids || [],
+              households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
             });
 
             break;
+          }
+
+          if (!session && i === attempts - 1) {
+            console.warn('No session found after polling attempts');
           }
 
           await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -83,7 +110,7 @@ export const AuthProvider = ({ children }) => {
             displayName: profile?.display_name || session.user.email,
             avatarUrl: profile?.avatar_url || '',
             role: profile?.role || 'Roommate',
-            households: profile?.households_ids || [],
+            households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
           });
         } else {
           setUser(null);
@@ -197,6 +224,7 @@ export const AuthProvider = ({ children }) => {
     loginUser,
     logoutUser,
     updateUser,
+    refreshUser,   // expose refreshUser for manual calls
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
