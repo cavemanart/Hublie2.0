@@ -1,9 +1,8 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const DashboardPage = () => {
-  const handleClick = (name) => {
-    alert(`${name} clicked`);
-  };
+  const navigate = useNavigate();
 
   return (
     <div style={{ padding: 24, fontFamily: 'Arial, sans-serif' }}>
@@ -25,7 +24,7 @@ const DashboardPage = () => {
             cursor: 'pointer',
             fontSize: 16,
           }}
-          onClick={() => handleClick('Shared Goals')}
+          onClick={() => navigate('/shared-goals')}
         >
           Shared Goals
         </button>
@@ -40,7 +39,7 @@ const DashboardPage = () => {
             cursor: 'pointer',
             fontSize: 16,
           }}
-          onClick={() => handleClick('Task Rotation')}
+          onClick={() => navigate('/task-rotation')}
         >
           Task Rotation
         </button>
@@ -55,7 +54,7 @@ const DashboardPage = () => {
             cursor: 'pointer',
             fontSize: 16,
           }}
-          onClick={() => handleClick('Vent Log')}
+          onClick={() => navigate('/vent-log')}
         >
           Vent Log
         </button>
