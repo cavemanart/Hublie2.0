@@ -3,12 +3,19 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import Layout from '@/components/Layout';
+
+// Existing Pages
 import HomePage from '@/pages/HomePage';
 import LoginPage from '@/pages/LoginPage';
 import OnboardingPage from '@/pages/OnboardingPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import NotFoundPage from '@/pages/NotFoundPage';
+
+// New Pages
+import SharedGoalsPage from '@/pages/SharedGoalsPage';
+import VentLogPage from '@/pages/VentLogPage';
+
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
 
@@ -16,7 +23,7 @@ const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div className="p-4 text-center">Loading...</div>; // Optional: replace with a fancy loader
+    return <div className="p-4 text-center">Loading...</div>;
   }
 
   if (!user) {
@@ -46,6 +53,22 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/shared-goals"
+          element={
+            <ProtectedRoute>
+              <SharedGoalsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vent-log"
+          element={
+            <ProtectedRoute>
+              <VentLogPage />
             </ProtectedRoute>
           }
         />
