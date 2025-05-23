@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from '@/components/ui/toaster';
 import Layout from '@/components/Layout';
 
-// Existing Pages
 import HomePage from '@/pages/HomePage';
 import LoginPage from '@/pages/LoginPage';
 import OnboardingPage from '@/pages/OnboardingPage';
@@ -11,16 +10,15 @@ import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
-// New Pages (make sure these exist)
 import SharedGoalsPage from '@/pages/SharedGoalsPage';
 import VentLogPage from '@/pages/VentLogPage';
-// If you add TaskRotation page, import it here too
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
+  console.log('ProtectedRoute user:', user, 'loading:', loading);
 
   if (loading) {
     return <div className="p-4 text-center">Loading...</div>;
@@ -49,7 +47,6 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/profile"
           element={
@@ -58,7 +55,6 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/shared-goals"
           element={
@@ -67,7 +63,6 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/vent-log"
           element={
@@ -77,16 +72,6 @@ function AppRoutes() {
           }
         />
 
-        {/* Add this if you have TaskRotationPage */}
-        {/* <Route
-          path="/task-rotation"
-          element={
-            <ProtectedRoute>
-              <TaskRotationPage />
-            </ProtectedRoute>
-          }
-        /> */}
-
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>
@@ -95,14 +80,14 @@ function AppRoutes() {
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <HouseholdProvider>
+    <AuthProvider>
+      <HouseholdProvider>
+        <Router>
           <AppRoutes />
           <Toaster />
-        </HouseholdProvider>
-      </AuthProvider>
-    </Router>
+        </Router>
+      </HouseholdProvider>
+    </AuthProvider>
   );
 }
 
