@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
@@ -14,52 +13,45 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
 
 const ProtectedRoute = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="p-4 text-center">Loading...</div>; // Optional: replace with a fancy loader
+  }
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
+
   return children;
 };
 
-function AppContent() {
-  const { toast } = useToast();
-
-  React.useEffect(() => {
-    // Example toast, can be removed
-    // toast({
-    //   title: "Welcome to Hublie.org!",
-    //   description: "Your family & household hub.",
-    // });
-  }, [toast]);
-
+function AppRoutes() {
   return (
-    <>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route 
-            path="/dashboard" 
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/profile" 
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Layout>
-      <Toaster />
-    </>
+    <Layout>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Layout>
   );
 }
 
@@ -68,7 +60,8 @@ function App() {
     <Router>
       <AuthProvider>
         <HouseholdProvider>
-          <AppContent />
+          <AppRoutes />
+          <Toaster />
         </HouseholdProvider>
       </AuthProvider>
     </Router>
@@ -76,4 +69,3 @@ function App() {
 }
 
 export default App;
-  
