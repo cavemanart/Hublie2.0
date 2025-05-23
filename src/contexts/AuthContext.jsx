@@ -116,6 +116,7 @@ export const AuthProvider = ({ children }) => {
       throw signUpError;
     }
 
+    // Auth state will update automatically
     return true;
   };
 
@@ -127,6 +128,7 @@ export const AuthProvider = ({ children }) => {
       throw error;
     }
 
+    // Auth state will update automatically
     return true;
   };
 
