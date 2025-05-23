@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
-import { useToast } from '@/components/ui/use-toast';
 import Layout from '@/components/Layout';
 
 // Existing Pages
@@ -12,9 +11,10 @@ import DashboardPage from '@/pages/DashboardPage';
 import ProfilePage from '@/pages/ProfilePage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
-// New Pages
+// New Pages (make sure these exist)
 import SharedGoalsPage from '@/pages/SharedGoalsPage';
 import VentLogPage from '@/pages/VentLogPage';
+// If you add TaskRotation page, import it here too
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
@@ -40,6 +40,7 @@ function AppRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
+
         <Route
           path="/dashboard"
           element={
@@ -48,6 +49,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/profile"
           element={
@@ -56,6 +58,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/shared-goals"
           element={
@@ -64,6 +67,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/vent-log"
           element={
@@ -72,6 +76,17 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+        {/* Add this if you have TaskRotationPage */}
+        {/* <Route
+          path="/task-rotation"
+          element={
+            <ProtectedRoute>
+              <TaskRotationPage />
+            </ProtectedRoute>
+          }
+        /> */}
+
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>
