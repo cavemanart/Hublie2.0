@@ -7,70 +7,98 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Upsert or create profile record in your "profiles" table
   const upsertProfile = async (supabaseUser) => {
-    const { error } = await supabase.from('profiles').upsert({
-      id: supabaseUser.id,
-      display_name: supabaseUser.user_metadata?.display_name || supabaseUser.email,
-      email: supabaseUser.email,
-      avatar_url: supabaseUser.user_metadata?.avatar_url || '',
-      role: supabaseUser.user_metadata?.role || 'Roommate',
-      households_ids: [],
-    });
-
-    if (error) console.error('Upsert profile error:', error);
-  };
-
-  const fetchProfile = async (userId) => {
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('id, display_name, avatar_url, role, households_ids')
-      .eq('id', userId)
-      .single();
-
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching profile:', error);
-    }
-
-    return profile;
-  };
-
-  const refreshUser = async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) {
-      console.error('Error refreshing session:', error);
-      return;
-    }
-    if (session?.user) {
-      await upsertProfile(session.user);
-      const profile = await fetchProfile(session.user.id);
-
-      setUser({
-        id: session.user.id,
-        email: session.user.email,
-        displayName: profile?.display_name || session.user.email,
-        avatarUrl: profile?.avatar_url || '',
-        role: profile?.role || 'Roommate',
-        households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
+    try {
+      const { error } = await supabase.from('profiles').upsert({
+        id: supabaseUser.id,
+        display_name: supabaseUser.user_metadata?.display_name || supabaseUser.email,
+        email: supabaseUser.email,
+        avatar_url: supabaseUser.user_metadata?.avatar_url || '',
+        role: supabaseUser.user_metadata?.role || 'Roommate',
+        households_ids: [],
       });
-    } else {
+      if (error) {
+        console.error('[Auth] Upsert profile error:', error);
+      }
+    } catch (e) {
+      console.error('[Auth] Upsert profile exception:', e);
+    }
+  };
+
+  // Fetch profile from "profiles" table
+  const fetchProfile = async (userId) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url, role, households_ids')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('[Auth] Error fetching profile:', error);
+      }
+
+      return profile;
+    } catch (e) {
+      console.error('[Auth] Fetch profile exception:', e);
+      return null;
+    }
+  };
+
+  // Refresh user session and profile info
+  const refreshUser = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('[Auth] Error refreshing session:', error);
+        setUser(null);
+        return;
+      }
+
+      if (session?.user) {
+        await upsertProfile(session.user);
+        const profile = await fetchProfile(session.user.id);
+
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+          displayName: profile?.display_name || session.user.email,
+          avatarUrl: profile?.avatar_url || '',
+          role: profile?.role || 'Roommate',
+          households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
+        });
+      } else {
+        setUser(null);
+      }
+    } catch (e) {
+      console.error('[Auth] refreshUser exception:', e);
       setUser(null);
     }
   };
 
   useEffect(() => {
-    const initAuth = async () => {
-      const pollSession = async (attempts = 5) => {
-        for (let i = 0; i < attempts; i++) {
+    let mounted = true;
+    let authListener;
+
+    // Poll session for initial auth state with retry
+    const pollSession = async (attempts = 5) => {
+      for (let i = 0; i < attempts; i++) {
+        if (!mounted) return;
+
+        try {
           const { data: { session }, error } = await supabase.auth.getSession();
+
           if (error) {
-            console.error('Error fetching session:', error);
+            console.error('[Auth] Poll session error:', error);
             break;
           }
 
           if (session?.user) {
+            console.log('[Auth] Poll session user found:', session.user.email);
             await upsertProfile(session.user);
             const profile = await fetchProfile(session.user.id);
-
+            if (!mounted) return;
             setUser({
               id: session.user.id,
               email: session.user.email,
@@ -79,27 +107,34 @@ export const AuthProvider = ({ children }) => {
               role: profile?.role || 'Roommate',
               households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
             });
-
             break;
           }
 
-          if (!session && i === attempts - 1) {
-            console.warn('No session found after polling attempts');
+          console.log(`[Auth] Poll attempt ${i + 1}, no session yet`);
+          if (i === attempts - 1) {
+            console.warn('[Auth] No session found after polling attempts');
           }
 
+          // Wait 1 second before next attempt
           await new Promise((resolve) => setTimeout(resolve, 1000));
+        } catch (e) {
+          console.error('[Auth] Poll session exception:', e);
+          break;
         }
-
-        setLoading(false);
-      };
-
-      await pollSession();
+      }
+      if (mounted) setLoading(false);
     };
 
-    initAuth();
+    // Initialize auth state and listen for changes
+    const initAuth = async () => {
+      setLoading(true);
+      await pollSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      authListener = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (!mounted) return;
+
+        console.log('[Auth] onAuthStateChange:', _event, session?.user?.email);
+
         if (session?.user) {
           await upsertProfile(session.user);
           const profile = await fetchProfile(session.user.id);
@@ -115,16 +150,28 @@ export const AuthProvider = ({ children }) => {
         } else {
           setUser(null);
         }
+        setLoading(false);
+      });
+    };
 
+    initAuth();
+
+    // Safety fallback timeout to avoid stuck loading
+    const loadingTimeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn('[Auth] Loading timeout reached, setting loading to false');
         setLoading(false);
       }
-    );
+    }, 7000);
 
     return () => {
-      authListener?.subscription.unsubscribe();
+      mounted = false;
+      clearTimeout(loadingTimeout);
+      if (authListener?.subscription) authListener.subscription.unsubscribe();
     };
   }, []);
 
+  // Register user with metadata
   const registerUser = async (email, password, displayName, role = 'Roommate') => {
     const { error: signUpError } = await supabase.auth.signUp({
       email,
@@ -132,44 +179,48 @@ export const AuthProvider = ({ children }) => {
       options: {
         data: {
           display_name: displayName,
-          role: role,
-          avatar_url: ''
+          role,
+          avatar_url: '',
         },
       },
     });
 
     if (signUpError) {
-      console.error('Supabase SignUp Error:', signUpError);
+      console.error('[Auth] Supabase SignUp Error:', signUpError);
       throw signUpError;
     }
 
     return true;
   };
 
+  // Login user
   const loginUser = async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      console.error('Supabase Login Error:', error);
+      console.error('[Auth] Supabase Login Error:', error);
       throw error;
     }
 
     return true;
   };
 
+  // Logout user
   const logoutUser = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      console.error('Supabase Logout Error:', error);
+      console.error('[Auth] Supabase Logout Error:', error);
       throw error;
     }
   };
 
+  // Update user and profile metadata
   const updateUser = async (updatedData) => {
-    if (!user) throw new Error("User not authenticated");
+    if (!user) throw new Error('User not authenticated');
 
     const { displayName, avatarUrl, role, households } = updatedData;
 
+    // Update auth user metadata
     const authUserUpdatePayload = {};
     if (displayName !== undefined) authUserUpdatePayload.display_name = displayName;
     if (avatarUrl !== undefined) authUserUpdatePayload.avatar_url = avatarUrl;
@@ -180,11 +231,12 @@ export const AuthProvider = ({ children }) => {
         data: authUserUpdatePayload,
       });
       if (authUpdateError) {
-        console.error("Error updating user auth metadata:", authUpdateError);
+        console.error('[Auth] Error updating user auth metadata:', authUpdateError);
         throw authUpdateError;
       }
     }
 
+    // Update profiles table
     const profileUpdatePayload = {};
     if (displayName !== undefined) profileUpdatePayload.display_name = displayName;
     if (avatarUrl !== undefined) profileUpdatePayload.avatar_url = avatarUrl;
@@ -198,11 +250,12 @@ export const AuthProvider = ({ children }) => {
         .eq('id', user.id);
 
       if (profileError) {
-        console.error('Error updating profile:', profileError);
+        console.error('[Auth] Error updating profile:', profileError);
         throw profileError;
       }
     }
 
+    // Update local user state
     const refreshedUser = {
       ...user,
       ...(displayName !== undefined && { displayName }),
@@ -228,6 +281,7 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// Custom hook for accessing auth context
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
