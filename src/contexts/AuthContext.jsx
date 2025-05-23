@@ -1,48 +1,52 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { createContext, useState, useEffect, useContext } from 'react';
+import { supabase } from '../lib/supabase';
 
-const AuthContext = createContext(null);
+const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const upsertProfile = async (supabaseUser) => {
-    const { error } = await supabase.from('profiles').upsert({
-      id: supabaseUser.id,
-      display_name: supabaseUser.user_metadata?.display_name || supabaseUser.email,
-      email: supabaseUser.email,
-      avatar_url: supabaseUser.user_metadata?.avatar_url || '',
-      role: supabaseUser.user_metadata?.role || 'Roommate',
-      households_ids: [],
-    });
-
-    if (error) console.error('Upsert profile error:', error);
-  };
-
+  // Fetch user profile data
   const fetchProfile = async (userId) => {
-    const { data: profile, error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, avatar_url, role, households_ids')
+      .select('*')
       .eq('id', userId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Error fetching profile:', error);
+      return null;
     }
 
-    return profile;
+    return data;
+  };
+
+  const upsertProfile = async (user) => {
+    const updates = {
+      id: user.id,
+      email: user.email,
+      updated_at: new Date(),
+    };
+
+    const { error } = await supabase.from('profiles').upsert(updates);
+    if (error) console.error('Error upserting profile:', error);
   };
 
   const refreshUser = async () => {
     const { data: { session }, error } = await supabase.auth.getSession();
+    console.log('RefreshUser - Session:', session);
+
     if (error) {
       console.error('Error refreshing session:', error);
       return;
     }
+
     if (session?.user) {
       await upsertProfile(session.user);
       const profile = await fetchProfile(session.user.id);
+      console.log('Fetched profile:', profile);
 
       setUser({
         id: session.user.id,
@@ -55,179 +59,56 @@ export const AuthProvider = ({ children }) => {
     } else {
       setUser(null);
     }
-  };
 
-  useEffect(() => {
-    const initAuth = async () => {
-      const pollSession = async (attempts = 5) => {
-        for (let i = 0; i < attempts; i++) {
-          const { data: { session }, error } = await supabase.auth.getSession();
-          if (error) {
-            console.error('Error fetching session:', error);
-            break;
-          }
-
-          if (session?.user) {
-            await upsertProfile(session.user);
-            const profile = await fetchProfile(session.user.id);
-
-            setUser({
-              id: session.user.id,
-              email: session.user.email,
-              displayName: profile?.display_name || session.user.email,
-              avatarUrl: profile?.avatar_url || '',
-              role: profile?.role || 'Roommate',
-              households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
-            });
-
-            break;
-          }
-
-          if (!session && i === attempts - 1) {
-            console.warn('No session found after polling attempts');
-          }
-
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-
-        setLoading(false);
-      };
-
-      await pollSession();
-    };
-
-    initAuth();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
-          await upsertProfile(session.user);
-          const profile = await fetchProfile(session.user.id);
-
-          setUser({
-            id: session.user.id,
-            email: session.user.email,
-            displayName: profile?.display_name || session.user.email,
-            avatarUrl: profile?.avatar_url || '',
-            role: profile?.role || 'Roommate',
-            households: Array.isArray(profile?.households_ids) ? profile.households_ids : [],
-          });
-        } else {
-          setUser(null);
-        }
-
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
-  }, []);
-
-  const registerUser = async (email, password, displayName, role = 'Roommate') => {
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          display_name: displayName,
-          role: role,
-          avatar_url: ''
-        },
-      },
-    });
-
-    if (signUpError) {
-      console.error('Supabase SignUp Error:', signUpError);
-      throw signUpError;
-    }
-
-    // Auth state will update automatically
-    return true;
+    setLoading(false);
   };
 
   const loginUser = async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       console.error('Supabase Login Error:', error);
       throw error;
     }
 
-    // Auth state will update automatically
+    await refreshUser(); // Ensure session and user state are loaded immediately
+    return true;
+  };
+
+  const registerUser = async (email, password) => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    if (error) {
+      console.error('Supabase Signup Error:', error);
+      throw error;
+    }
+
     return true;
   };
 
   const logoutUser = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Supabase Logout Error:', error);
-      throw error;
-    }
+    await supabase.auth.signOut();
+    setUser(null);
   };
 
-  const updateUser = async (updatedData) => {
-    if (!user) throw new Error("User not authenticated");
+  useEffect(() => {
+    refreshUser(); // Check session on load
 
-    const { displayName, avatarUrl, role, households } = updatedData;
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state change:', event);
+      refreshUser(); // Always refresh user when auth state changes
+    });
 
-    const authUserUpdatePayload = {};
-    if (displayName !== undefined) authUserUpdatePayload.display_name = displayName;
-    if (avatarUrl !== undefined) authUserUpdatePayload.avatar_url = avatarUrl;
-    if (role !== undefined) authUserUpdatePayload.role = role;
-
-    if (Object.keys(authUserUpdatePayload).length > 0) {
-      const { error: authUpdateError } = await supabase.auth.updateUser({
-        data: authUserUpdatePayload,
-      });
-      if (authUpdateError) {
-        console.error("Error updating user auth metadata:", authUpdateError);
-        throw authUpdateError;
-      }
-    }
-
-    const profileUpdatePayload = {};
-    if (displayName !== undefined) profileUpdatePayload.display_name = displayName;
-    if (avatarUrl !== undefined) profileUpdatePayload.avatar_url = avatarUrl;
-    if (role !== undefined) profileUpdatePayload.role = role;
-    if (households !== undefined) profileUpdatePayload.households_ids = households;
-
-    if (Object.keys(profileUpdatePayload).length > 0) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(profileUpdatePayload)
-        .eq('id', user.id);
-
-      if (profileError) {
-        console.error('Error updating profile:', profileError);
-        throw profileError;
-      }
-    }
-
-    const refreshedUser = {
-      ...user,
-      ...(displayName !== undefined && { displayName }),
-      ...(avatarUrl !== undefined && { avatarUrl }),
-      ...(role !== undefined && { role }),
-      ...(households !== undefined && { households }),
+    return () => {
+      listener.subscription?.unsubscribe();
     };
+  }, []);
 
-    setUser(refreshedUser);
-    return refreshedUser;
-  };
-
-  const value = {
-    user,
-    loading,
-    registerUser,
-    loginUser,
-    logoutUser,
-    updateUser,
-    refreshUser,   // expose refreshUser for manual calls
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, loginUser, registerUser, logoutUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
